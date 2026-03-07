@@ -1,0 +1,50 @@
+# =====================
+# Node / Next.js
+# =====================
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# =====================
+# Python / FastAPI
+# =====================
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# =====================
+# Environment Variables (CRITICAL — never commit secrets)
+# =====================
+.env
+.env.local
+.env.*.local
+CREDENTIALS.md
+
+# =====================
+# IDE / Editor
+# =====================
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# =====================
+# OS Files
+# =====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =====================
+# Misc
+# =====================
+*.log
+coverage/
+.vercel
