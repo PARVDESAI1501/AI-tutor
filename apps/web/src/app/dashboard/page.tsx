@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GraduationCap, Upload, FileText, Youtube } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
+import { UploadDialog } from "@/components/upload-dialog";
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient();
@@ -46,10 +46,7 @@ export default async function DashboardPage() {
               Upload documents or YouTube videos to start learning
             </p>
           </div>
-          <Button>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Content
-          </Button>
+          <UploadDialog userId={user.id} />
         </div>
 
         {/* Content Grid */}
@@ -63,11 +60,11 @@ export default async function DashboardPage() {
                 <CardContent className="p-6">
                   <div className="flex items-start gap-3">
                     {source.source_type === "youtube" ? (
-                      <Youtube className="h-5 w-5 text-red-500 mt-0.5" />
+                      <Youtube className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
                     ) : (
-                      <FileText className="h-5 w-5 text-blue-500 mt-0.5" />
+                      <FileText className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
                     )}
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="font-semibold line-clamp-2">
                         {source.title}
                       </h3>
@@ -78,12 +75,12 @@ export default async function DashboardPage() {
                       <span
                         className={`inline-block mt-2 text-xs px-2 py-1 rounded-full ${
                           source.status === "ready"
-                            ? "bg-green-100 text-green-700"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                             : source.status === "processing"
-                              ? "bg-yellow-100 text-yellow-700"
+                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
                               : source.status === "error"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-gray-100 text-gray-700"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
                         }`}
                       >
                         {source.status}
@@ -107,10 +104,7 @@ export default async function DashboardPage() {
               Upload a PDF, PowerPoint, Word document, or paste a YouTube URL to
               get started with AI-powered learning.
             </p>
-            <Button>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Your First Document
-            </Button>
+            <UploadDialog userId={user.id} />
           </div>
         )}
       </main>
