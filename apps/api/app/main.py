@@ -5,13 +5,15 @@ app = FastAPI(
     title="AI-Tutor API",
     description="Backend API for AI-Tutor — AI-powered study platform",
     version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
-# Allow frontend to call this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
