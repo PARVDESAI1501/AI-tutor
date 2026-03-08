@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { GraduationCap, Upload, FileText, Youtube } from "lucide-react";
@@ -15,7 +16,6 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  // Fetch user's sources
   const { data: sources } = await supabase
     .from("sources")
     .select("*")
@@ -53,46 +53,52 @@ export default async function DashboardPage() {
         {sources && sources.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sources.map((source) => (
-              <Card
+              <Link
                 key={source.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
+                href={source.status === "ready" ? `/source/${source.id}` : "#"}
+                className={
+                  source.status !== "ready"
+                    ? "pointer-events-none opacity-60"
+                    : ""
+                }
               >
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-3">
-                    {source.source_type === "youtube" ? (
-                      <Youtube className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-                    ) : (
-                      <FileText className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <h3 className="font-semibold line-clamp-2">
-                        {source.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {source.source_type.toUpperCase()} •{" "}
-                        {new Date(source.created_at).toLocaleDateString()}
-                      </p>
-                      <span
-                        className={`inline-block mt-2 text-xs px-2 py-1 rounded-full ${
-                          source.status === "ready"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                            : source.status === "processing"
-                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
-                              : source.status === "error"
-                                ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
-                                : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
-                        }`}
-                      >
-                        {source.status}
-                      </span>
+                <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-3">
+                      {source.source_type === "youtube" ? (
+                        <Youtube className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <h3 className="font-semibold line-clamp-2">
+                          {source.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {source.source_type.toUpperCase()} •{" "}
+                          {new Date(source.created_at).toLocaleDateString()}
+                        </p>
+                        <span
+                          className={`inline-block mt-2 text-xs px-2 py-1 rounded-full ${
+                            source.status === "ready"
+                              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                              : source.status === "processing"
+                                ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
+                                : source.status === "error"
+                                  ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                                  : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                          }`}
+                        >
+                          {source.status}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         ) : (
-          /* Empty State */
           <div className="text-center py-20">
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-primary/10 p-6">
