@@ -27,25 +27,21 @@ export default async function DashboardPage({
   const searchQuery = params.q || "";
   const typeFilter = params.type || "all";
 
-  // Build query
   let query = supabase
     .from("sources")
     .select("*")
     .order("created_at", { ascending: false });
 
-  // Apply search filter
   if (searchQuery) {
     query = query.ilike("title", `%${searchQuery}%`);
   }
 
-  // Apply type filter
   if (typeFilter && typeFilter !== "all") {
     query = query.eq("source_type", typeFilter);
   }
 
   const { data: sources } = await query;
 
-  // Get counts for filter badges
   const { data: allSources } = await supabase
     .from("sources")
     .select("source_type");
@@ -60,7 +56,6 @@ export default async function DashboardPage({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Navigation */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -77,7 +72,6 @@ export default async function DashboardPage({
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
@@ -89,29 +83,19 @@ export default async function DashboardPage({
           <UploadDialog userId={user.id} />
         </div>
 
-        {/* Search and Filters */}
         <DashboardSearch
           currentQuery={searchQuery}
           currentType={typeFilter}
           counts={counts}
         />
 
-        {/* Content Grid */}
         {sources && sources.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-            {sources.map((source) => (
-              <Link
-                key={source.id}
-                href={
-                  source.status === "ready" ? `/source/${source.id}` : "#"
-                }
-                className={
-                  source.status !== "ready"
-                    ? "pointer-events-none opacity-60"
-                    : ""
-                }
-              >
-                <Card className="hover:shadow-md transition-all cursor-pointer h-full group">
+            {sources.map((source) => {
+              const isReady = source.status === "ready";
+
+              const cardContent = (
+                <Card className={`hover:shadow-md transition-all h-full group ${isReady ? "cursor-pointer" : "opacity-80"}`}>
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -135,7 +119,6 @@ export default async function DashboardPage({
                         </div>
                       </div>
 
-                      {/* Delete Button + Status */}
                       <div className="flex flex-col items-end gap-2 flex-shrink-0">
                         <DeleteSourceButton
                           sourceId={source.id}
@@ -159,8 +142,22 @@ export default async function DashboardPage({
                     </div>
                   </CardContent>
                 </Card>
-              </Link>
-            ))}
+              );
+
+              if (isReady) {
+                return (
+                  <Link key={source.id} href={`/source/${source.id}`}>
+                    {cardContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={source.id}>
+                  {cardContent}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-20 mt-6">
