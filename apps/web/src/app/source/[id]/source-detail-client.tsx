@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ContentViewer } from "@/components/content-viewer";
 import { StudyToolsPanel } from "@/components/study-tools-panel";
+import { StudyTimer } from "@/components/study-timer";
+import { DifficultyMeter } from "@/components/difficulty-meter";
 import {
   GraduationCap,
   ArrowLeft,
@@ -58,35 +60,47 @@ export function SourceDetailClient({
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowViewer(!showViewer)}
-          >
-            {showViewer ? (
-              <>
-                <PanelLeftClose className="h-4 w-4 mr-1" />
-                Hide Source
-              </>
-            ) : (
-              <>
-                <PanelLeft className="h-4 w-4 mr-1" />
-                Show Source
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowViewer(!showViewer)}
+            >
+              {showViewer ? (
+                <>
+                  <PanelLeftClose className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Hide Source</span>
+                </>
+              ) : (
+                <>
+                  <PanelLeft className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Show Source</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {showViewer && (
-          <div className="w-1/2 border-r overflow-hidden">
-            <ContentViewer
-              sourceType={source.source_type}
-              youtubeUrl={source.youtube_url}
-              title={source.title}
-              chunks={chunks}
-            />
+          <div className="w-1/2 border-r overflow-hidden flex flex-col">
+            {/* Study Tools Above Content */}
+            <div className="p-3 border-b space-y-2">
+              <StudyTimer sourceTitle={source.title} />
+              <DifficultyMeter
+                chunkCount={chunks.length}
+                sourceType={source.source_type}
+              />
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ContentViewer
+                sourceType={source.source_type}
+                youtubeUrl={source.youtube_url}
+                title={source.title}
+                chunks={chunks}
+              />
+            </div>
           </div>
         )}
 

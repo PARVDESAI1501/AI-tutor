@@ -1,6 +1,7 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 
 interface AppLayoutClientProps {
   children: React.ReactNode;
@@ -12,9 +13,8 @@ export function AppLayoutClient({ children, userEmail, userId }: AppLayoutClient
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <AppSidebar userEmail={userEmail} userId={userId} />
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
+      <main className="flex-1 overflow-auto">{children}</main>
+      <KeyboardShortcuts />
     </div>
   );
 }
