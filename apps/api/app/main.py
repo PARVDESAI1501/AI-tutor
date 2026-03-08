@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import ingest, chat
+from app.routers import ingest, chat, generate
 
 app = FastAPI(
     title="AI-Tutor API",
@@ -23,6 +23,7 @@ app.add_middleware(
 
 app.include_router(ingest.router)
 app.include_router(chat.router)
+app.include_router(generate.router)
 
 
 @app.get("/health")

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ChatPanel } from "@/components/chat-panel";
 import { ContentViewer } from "@/components/content-viewer";
+import { StudyToolsPanel } from "@/components/study-tools-panel";
 import {
   GraduationCap,
   ArrowLeft,
@@ -41,7 +41,6 @@ export function SourceDetailClient({
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Top Bar */}
       <header className="border-b bg-background z-10">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
@@ -79,9 +78,7 @@ export function SourceDetailClient({
         </div>
       </header>
 
-      {/* Split Pane */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Content Viewer */}
         {showViewer && (
           <div className="w-1/2 border-r overflow-hidden">
             <ContentViewer
@@ -93,9 +90,8 @@ export function SourceDetailClient({
           </div>
         )}
 
-        {/* Right: Chat Panel */}
         <div className={showViewer ? "w-1/2" : "w-full"}>
-          <ChatPanel
+          <StudyToolsPanel
             sourceId={source.id}
             userId={userId}
             sourceTitle={source.title}
