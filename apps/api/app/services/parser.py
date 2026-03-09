@@ -2,9 +2,9 @@ import re
 import json
 import tempfile
 import os
-import xml.etree.ElementTree as ET
 from io import BytesIO
 from bs4 import BeautifulSoup
+import yt_dlp
 
 import fitz  # PyMuPDF
 import httpx
@@ -14,7 +14,7 @@ from groq import Groq
 from app.config import settings
 
 class DocumentParser:
-    """Unified parser for ALL formats including Web, Audio, Video, and Text."""
+    """Unified parser for ALL formats."""
 
     def parse_pdf(self, file_bytes: bytes) -> list[dict]:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -55,82 +55,137 @@ class DocumentParser:
             response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         for element in soup(["script", "style", "nav", "footer", "header"]):
             element.decompose()
             
         text = soup.get_text(separator='\n', strip=True)
-        # Clean up excessive newlines
         text = re.sub(r'\n\s*\n', '\n\n', text)
         return [{"content": text.strip(), "page_number": None, "metadata": {"type": "website", "url": url}}]
 
     def parse_audio_video(self, file_bytes: bytes, filename: str) -> list[dict]:
-        """Uses Groq Whisper API for transcription of audio/video."""
         ext = filename.split('.')[-1].lower() if filename else "webm"
         if ext not in ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm']:
-            ext = 'webm' # default for recordings
+            ext = 'webm'
 
         client = Groq(api_key=settings.GROQ_API_KEY)
-        
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as temp_file:
             temp_file.write(file_bytes)
             temp_path = temp_file.name
 
         try:
             with open(temp_path, "rb") as file:
-                # Use standard JSON format, not verbose_json, to avoid dictionary attribute errors
                 transcription = client.audio.transcriptions.create(
                     file=(f"audio.{ext}", file.read()),
                     model="whisper-large-v3",
                     response_format="json",
                 )
             
-            # The API returns a Transcription object or a dictionary depending on version
-            # We handle both safely here
-            text = ""
-            if isinstance(transcription, dict):
-                text = transcription.get('text', '')
-            else:
-                text = getattr(transcription, 'text', '')
-                
-            if not text or not text.strip():
-                raise ValueError("No speech detected in the audio file.")
-                
+            text = transcription.get('text', '') if isinstance(transcription, dict) else getattr(transcription, 'text', '')
+            if not text or not text.strip(): raise ValueError("No speech detected.")
             return [{"content": text.strip(), "page_number": None, "metadata": {"type": "audio"}}]
-            
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
     def parse_youtube(self, url: str) -> list[dict]:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        video_id = self._extract_video_id(url)
-        
+        """Fetch YouTube subtitles using yt_dlp."""
+        ydl_opts = {
+            'quiet': True,
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['en', 'en-US', 'en-GB'],
+        }
+
         try:
-            entries = YouTubeTranscriptApi.get_transcript(video_id)
-        except Exception:
-            try:
-                entries = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-            except Exception as e:
-                raise ValueError(f"Failed to fetch YouTube transcript. The video might not have captions or is blocked. Error: {e}")
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Disable warning prints to keep terminal clean
+                import logging
+                ydl.logger = logging.getLogger('yt_dlp')
+                ydl.logger.setLevel(logging.ERROR)
                 
-        segments = []
-        current = []
-        start = 0
-        for e in entries:
-            current.append(e["text"])
-            if e["start"] - start > 120:
-                segments.append({"content": " ".join(current), "page_number": None, "metadata": {"type": "youtube"}})
-                current = []
-                start = e["start"]
-        if current: 
-            segments.append({"content": " ".join(current), "page_number": None, "metadata": {"type": "youtube"}})
-            
-        return segments
+                info = ydl.extract_info(url, download=False)
+                
+                sub_url = None
+                sub_format = None
+                
+                if 'subtitles' in info and info['subtitles']:
+                    for lang in ['en', 'en-US', 'en-GB']:
+                        if lang in info['subtitles']:
+                            for sub in info['subtitles'][lang]:
+                                if sub.get('ext') == 'json3':
+                                    sub_url = sub.get('url')
+                                    sub_format = 'json3'
+                                    break
+                            if not sub_url:
+                                sub_url = info['subtitles'][lang][0].get('url')
+                                sub_format = info['subtitles'][lang][0].get('ext')
+                            break
+
+                if not sub_url and 'automatic_captions' in info and info['automatic_captions']:
+                    for lang in ['en', 'en-US', 'en-GB', 'en-orig']:
+                        if lang in info['automatic_captions']:
+                            for sub in info['automatic_captions'][lang]:
+                                if sub.get('ext') == 'json3':
+                                    sub_url = sub.get('url')
+                                    sub_format = 'json3'
+                                    break
+                            if not sub_url:
+                                sub_url = info['automatic_captions'][lang][0].get('url')
+                                sub_format = info['automatic_captions'][lang][0].get('ext')
+                            break
+                            
+                if not sub_url:
+                    raise ValueError("No English subtitles or auto-captions exist for this video.")
+
+                with httpx.Client(follow_redirects=True, timeout=15) as client:
+                    res = client.get(sub_url)
+                    res.raise_for_status()
+                    
+                full_text = ""
+                
+                if sub_format == 'json3':
+                    data = res.json()
+                    events = data.get('events', [])
+                    for event in events:
+                        segs = event.get('segs', [])
+                        for seg in segs:
+                            text = seg.get('utf8', '').strip()
+                            if text and text != '\n':
+                                full_text += text + " "
+                else:
+                    # Fallback parsing for VTT
+                    lines = res.text.split('\n')
+                    clean_lines = []
+                    for line in lines:
+                        if not line.strip() or line.strip().isdigit() or '-->' in line or line.startswith('WEBVTT'):
+                            continue
+                        line = re.sub(r'<[^>]+>', '', line)
+                        clean_lines.append(line.strip())
+                    full_text = " ".join(clean_lines)
+
+                full_text = re.sub(r'\s+', ' ', full_text).strip()
+                
+                if not full_text:
+                    raise ValueError("Transcript was downloaded but contained no readable text.")
+
+                segments = []
+                chunk_size = 2000
+                for i in range(0, len(full_text), chunk_size):
+                    segments.append({
+                        "content": full_text[i:i+chunk_size], 
+                        "page_number": None, 
+                        "metadata": {"type": "youtube"}
+                    })
+                    
+                return segments
+
+        except Exception as e:
+            raise ValueError(f"Failed to fetch YouTube transcript: {str(e)}")
 
     def _extract_video_id(self, url: str) -> str:
-        patterns = [r"(?:v=)([0-9A-Za-z_-]{11})", r"(?:youtu\.be/)([0-9A-Za-z_-]{11})"]
+        patterns = [r"(?:v=)([0-9A-Za-z_-]{11})", r"(?:youtu\.be/)([0-9A-Za-z_-]{11})", r"(?:embed/)([0-9A-Za-z_-]{11})"]
         for p in patterns:
             match = re.search(p, url)
             if match: return match.group(1)
-        raise ValueError("Invalid YouTube URL")
+        return url
