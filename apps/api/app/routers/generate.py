@@ -1,4 +1,5 @@
 import traceback
+import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.llm import LLMService
@@ -13,7 +14,7 @@ class GenerateRequest(BaseModel):
 
 def get_summary_prompt(content: str) -> str:
     return f"""Analyze the following study material and generate a structured summary.
-Return valid JSON:
+Return valid JSON ONLY (no markdown fences):
 {{
     "title": "Title",
     "overview": "2-3 sentence overview",
@@ -21,86 +22,74 @@ Return valid JSON:
     "sections": [{{"heading": "Heading", "content": "Content", "key_points": ["Point 1"]}}],
     "conclusion": "Conclusion"
 }}
-Generate 3+ key concepts and 2-3 sections. Be concise but thorough.
-
-MATERIAL:
-{content}"""
+MATERIAL:\n{content}"""
 
 def get_flashcards_prompt(content: str) -> str:
     return f"""Create 10 educational flashcards from this material.
-Return valid JSON:
+Return valid JSON ONLY (no markdown fences):
 {{
     "flashcards": [{{"front": "Question", "back": "Answer", "difficulty": "easy"}}]
 }}
-Difficulty: "easy", "medium", or "hard". Cover different topics.
-
-MATERIAL:
-{content}"""
+MATERIAL:\n{content}"""
 
 def get_quiz_prompt(content: str) -> str:
     return f"""Create 8 multiple choice questions from this material.
-Return valid JSON:
+Return valid JSON ONLY (no markdown fences):
 {{
     "questions": [{{"question": "Question", "type": "multiple_choice", "options": ["A) Opt1", "B) Opt2", "C) Opt3", "D) Opt4"], "correct_answer": "A", "explanation": "Why"}}]
 }}
-correct_answer must be "A", "B", "C", or "D". Vary difficulty.
+MATERIAL:\n{content}"""
 
-MATERIAL:
-{content}"""
+def get_podcast_prompt(content: str) -> str:
+    return f"""Create a lively 2-person podcast script discussing this material.
+Hosts: "Alex" (Explainative) and "Sam" (Curious/Host).
+Style: Conversational, engaging, like a real radio show. Use "Um", "Exactly", "Wow".
+Length: 10 exchanges.
+Return valid JSON ONLY (no markdown fences):
+{{
+    "title": "Podcast Title",
+    "script": [
+        {{"speaker": "Sam", "text": "Welcome back! Today we're diving into..."}},
+        {{"speaker": "Alex", "text": "Thanks Sam! This is a fascinating topic because..."}}
+    ]
+}}
+MATERIAL:\n{content}"""
 
-PROMPT_BUILDERS = {"summary": get_summary_prompt, "flashcards": get_flashcards_prompt, "quiz": get_quiz_prompt}
+PROMPT_BUILDERS = {
+    "summary": get_summary_prompt,
+    "flashcards": get_flashcards_prompt,
+    "quiz": get_quiz_prompt,
+    "podcast": get_podcast_prompt
+}
 
 @router.post("/generate")
 async def generate_material(request: GenerateRequest):
     if request.material_type not in PROMPT_BUILDERS:
-        raise HTTPException(status_code=400, detail="Invalid type. Use: summary, flashcards, quiz")
+        raise HTTPException(status_code=400, detail="Invalid type")
 
     supabase = get_supabase_client()
 
+    # Check cache first
     try:
-        source_result = supabase.table("sources").select("id, status, title").eq("id", request.source_id).single().execute()
-    except Exception:
-        raise HTTPException(status_code=404, detail="Source not found")
+        existing = supabase.table("study_materials").select("*").eq("source_id", request.source_id).eq("material_type", request.material_type).execute()
+        if existing.data:
+            return {"content": existing.data[0]["content"], "cached": True}
+    except Exception: pass
 
-    if not source_result.data or source_result.data["status"] != "ready":
-        raise HTTPException(status_code=400, detail="Source not found or not ready")
+    # Fetch chunks (limit to top 20 to speed up generation)
+    chunks = supabase.table("chunks").select("content").eq("source_id", request.source_id).order("chunk_index").limit(20).execute()
+    if not chunks.data: raise HTTPException(status_code=400, detail="No content")
 
-    # Check cache
-    try:
-        existing = supabase.table("study_materials").select("*").eq("source_id", request.source_id).eq("user_id", request.user_id).eq("material_type", request.material_type).execute()
-        if existing.data and len(existing.data) > 0:
-            return {"material_type": request.material_type, "content": existing.data[0]["content"], "id": existing.data[0]["id"], "cached": True}
-    except Exception:
-        pass
-
-    # Fetch chunks — LIMIT to 30 most important chunks instead of all 473
-    chunks_result = supabase.table("chunks").select("content, chunk_index").eq("source_id", request.source_id).order("chunk_index", desc=False).limit(30).execute()
-
-    if not chunks_result.data:
-        raise HTTPException(status_code=400, detail="No content found")
-
-    # Use only 8000 chars to speed up generation
-    full_content = "\n\n".join([c["content"] for c in chunks_result.data])
-    if len(full_content) > 8000:
-        full_content = full_content[:8000] + "\n\n[Content truncated for processing]"
-
+    full_content = "\n".join([c["content"] for c in chunks.data])[:8000]
     prompt = PROMPT_BUILDERS[request.material_type](full_content)
 
     try:
-        llm = LLMService()
-        result = llm.generate_json(prompt)
+        # Generate raw JSON response
+        result = LLMService().generate_json(prompt)
+        
+        # Save to DB
+        supabase.table("study_materials").insert({"source_id": request.source_id, "user_id": request.user_id, "material_type": request.material_type, "content": result}).execute()
+        return {"content": result, "cached": False}
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Generation failed. Try again.")
-
-    try:
-        saved = supabase.table("study_materials").insert({"source_id": request.source_id, "user_id": request.user_id, "material_type": request.material_type, "content": result}).execute()
-        return {"material_type": request.material_type, "content": result, "id": saved.data[0]["id"] if saved.data else None, "cached": False}
-    except Exception:
-        return {"material_type": request.material_type, "content": result, "id": None, "cached": False}
-
-@router.get("/materials/{source_id}")
-async def get_materials(source_id: str, user_id: str):
-    supabase = get_supabase_client()
-    result = supabase.table("study_materials").select("*").eq("source_id", source_id).eq("user_id", user_id).execute()
-    return result.data or []
+        raise HTTPException(status_code=500, detail="Generation failed. The AI timed out or returned invalid format. Try again.")

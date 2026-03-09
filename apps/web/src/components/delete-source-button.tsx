@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +29,10 @@ export function DeleteSourceButton({
 }: DeleteSourceButtonProps) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  useEffect(() => setMounted(true), []);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -54,6 +57,14 @@ export function DeleteSourceButton({
     }
   };
 
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" suppressHydrationWarning>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -66,6 +77,7 @@ export function DeleteSourceButton({
             e.stopPropagation();
             setOpen(true);
           }}
+          suppressHydrationWarning
         >
           <Trash2 className="h-4 w-4" />
         </Button>

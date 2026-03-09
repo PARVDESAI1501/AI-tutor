@@ -1,412 +1,354 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Upload,
-  FileText,
-  Youtube,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  File,
-} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Upload, FileText, Youtube, Globe, Mic, FileAudio, Loader2, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface UploadDialogProps {
-  userId: string;
-}
-
-export function UploadDialog({ userId }: UploadDialogProps) {
+export function UploadDialog({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("file");
-
-  // File upload state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileTitle, setFileTitle] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // YouTube state
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeTitle, setYoutubeTitle] = useState("");
-
-  // Processing state
-  const [uploading, setUploading] = useState(false);
-  const [status, setStatus] = useState<
-    "idle" | "uploading" | "processing" | "done" | "error"
-  >("idle");
-  const [statusMessage, setStatusMessage] = useState("");
-  const [sourceId, setSourceId] = useState<string | null>(null);
-
+  const [activeTab, setActiveTab] = useState<"select" | "file" | "media" | "web" | "text" | "record">("select");
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
   const router = useRouter();
 
-  // ─────────────────────────────────────────────
-  // File Selection
-  // ─────────────────────────────────────────────
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setTimeout(() => {
+        setActiveTab("select");
+        setFile(null);
+        setTitle("");
+        setUrl("");
+        setText("");
+        setStatus("idle");
+        setMsg("");
+        setAudioBlob(null);
+        setRecording(false);
+      }, 300);
+    }
+  }, [open]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setFile(f);
+      setTitle(f.name.split(".")[0]);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder.current = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      mediaRecorder.current.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.current.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        setAudioBlob(blob);
+        setFile(new File([blob], "recording.webm", { type: "audio/webm" }));
+        setTitle("Lecture Recording");
+      };
+      mediaRecorder.current.start();
+      setRecording(true);
+    } catch (e) {
+      alert("Microphone access denied.");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorder.current?.stop();
+    setRecording(false);
+  };
+
+  const uploadFile = async () => {
     if (!file) return;
-
-    // Validate file type
-    const allowedExtensions = [".pdf", ".pptx", ".docx"];
-    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-    if (!allowedExtensions.includes(ext)) {
-      setStatusMessage("Please upload a PDF, PPTX, or DOCX file.");
-      setStatus("error");
-      return;
-    }
-
-    // Validate file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      setStatusMessage("File is too large. Maximum size is 10MB.");
-      setStatus("error");
-      return;
-    }
-
-    setSelectedFile(file);
-    setFileTitle(file.name.replace(/\.[^/.]+$/, "")); // Remove extension for title
-    setStatus("idle");
-    setStatusMessage("");
-  };
-
-  // ─────────────────────────────────────────────
-  // File Upload Handler
-  // ─────────────────────────────────────────────
-  const handleFileUpload = async () => {
-    if (!selectedFile || !fileTitle.trim()) return;
-
-    setUploading(true);
     setStatus("uploading");
-    setStatusMessage("Uploading file...");
+    setMsg("Uploading file...");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("user_id", userId);
+    formData.append("title", title || "Untitled");
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("user_id", userId);
-      formData.append("title", fileTitle.trim());
-
-      const response = await fetch(`${API_URL}/api/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Upload failed");
-      }
-
-      const data = await response.json();
-      setSourceId(data.source_id);
-      setStatus("processing");
-      setStatusMessage("Processing document... This may take a minute.");
-
-      // Start polling for status
-      pollStatus(data.source_id);
-    } catch (error: any) {
+      const res = await fetch(`${API_URL}/api/upload`, { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      poll(await res.json().then((d) => d.source_id));
+    } catch (e: any) {
       setStatus("error");
-      setStatusMessage(error.message || "Upload failed. Please try again.");
-      setUploading(false);
+      setMsg(e.message);
     }
   };
 
-  // ─────────────────────────────────────────────
-  // YouTube Upload Handler
-  // ─────────────────────────────────────────────
-  const handleYoutubeUpload = async () => {
-    if (!youtubeUrl.trim()) return;
-
-    // Basic YouTube URL validation
-    const youtubeRegex =
-      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/;
-    if (!youtubeRegex.test(youtubeUrl)) {
-      setStatus("error");
-      setStatusMessage("Please enter a valid YouTube URL.");
-      return;
-    }
-
-    setUploading(true);
+  const uploadWeb = async (isYoutube: boolean) => {
+    if (!url) return;
     setStatus("uploading");
-    setStatusMessage("Fetching video transcript...");
-
+    setMsg("Fetching content...");
     try {
-      const response = await fetch(`${API_URL}/api/youtube`, {
+      const res = await fetch(`${API_URL}/api/web`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: youtubeUrl.trim(),
-          user_id: userId,
-          title: youtubeTitle.trim() || undefined,
-        }),
+        body: JSON.stringify({ url, user_id: userId, title: title || url, type: isYoutube ? "youtube" : "web" }),
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Failed to process YouTube video");
-      }
-
-      const data = await response.json();
-      setSourceId(data.source_id);
-      setStatus("processing");
-      setStatusMessage("Processing transcript... This may take a minute.");
-
-      // Start polling for status
-      pollStatus(data.source_id);
-    } catch (error: any) {
+      if (!res.ok) throw new Error("Failed");
+      poll(await res.json().then((d) => d.source_id));
+    } catch (e: any) {
       setStatus("error");
-      setStatusMessage(
-        error.message || "Failed to process video. Please try again.",
-      );
-      setUploading(false);
+      setMsg(e.message);
     }
   };
 
-  // ─────────────────────────────────────────────
-  // Poll Processing Status
-  // ─────────────────────────────────────────────
-  const pollStatus = async (sid: string) => {
-    const interval = setInterval(async () => {
+  const uploadText = async () => {
+    if (!text) return;
+    setStatus("uploading");
+    setMsg("Processing text...");
+    try {
+      const res = await fetch(`${API_URL}/api/text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, user_id: userId, title: title || "Pasted Text" }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      poll(await res.json().then((d) => d.source_id));
+    } catch (e: any) {
+      setStatus("error");
+      setMsg(e.message);
+    }
+  };
+
+  const poll = (sid: string) => {
+    setStatus("processing");
+    setMsg("AI is analyzing content...");
+    const int = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/source/${sid}/status`);
-        const data = await response.json();
-
+        const res = await fetch(`${API_URL}/api/source/${sid}/status`);
+        const data = await res.json();
         if (data.status === "ready") {
-          clearInterval(interval);
+          clearInterval(int);
           setStatus("done");
-          setStatusMessage(
-            `Done! Created ${data.chunk_count} chunks. Redirecting...`,
-          );
-          setUploading(false);
-
-          // Wait a moment then refresh dashboard
+          setMsg("Done! Redirecting...");
           setTimeout(() => {
             setOpen(false);
-            resetState();
             router.refresh();
-          }, 1500);
+          }, 1000);
         } else if (data.status === "error") {
-          clearInterval(interval);
+          clearInterval(int);
           setStatus("error");
-          setStatusMessage(
-            data.error || "Processing failed. Please try again.",
-          );
-          setUploading(false);
+          setMsg(data.error);
         }
-        // If still "processing", keep polling
-      } catch (error) {
-        // Network error during polling — keep trying
-        console.error("Polling error:", error);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    // Safety: stop polling after 5 minutes
-    setTimeout(() => {
-      clearInterval(interval);
-      if (status === "processing") {
-        setStatus("error");
-        setStatusMessage("Processing timed out. Please try again.");
-        setUploading(false);
-      }
-    }, 300000);
+      } catch (e) {}
+    }, 2000);
   };
 
-  // ─────────────────────────────────────────────
-  // Reset State
-  // ─────────────────────────────────────────────
-  const resetState = () => {
-    setSelectedFile(null);
-    setFileTitle("");
-    setYoutubeUrl("");
-    setYoutubeTitle("");
-    setUploading(false);
-    setStatus("idle");
-    setStatusMessage("");
-    setSourceId(null);
-  };
-
-  // ─────────────────────────────────────────────
-  // Status Icon
-  // ─────────────────────────────────────────────
-  const StatusIcon = () => {
-    switch (status) {
-      case "uploading":
-      case "processing":
-        return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
-      case "done":
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case "error":
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      default:
-        return null;
-    }
-  };
+  const OptionCard = ({ icon: Icon, label, desc, onClick, color }: any) => (
+    <motion.button
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="flex flex-col items-center justify-center p-6 h-40 rounded-2xl border border-border/50 bg-card hover:border-primary/50 hover:bg-accent/50 transition-all shadow-sm hover:shadow-md group"
+    >
+      <div className={`p-3 rounded-full mb-3 ${color} bg-opacity-10`}>
+        <Icon className={`w-8 h-8 ${color.replace("bg-", "text-")}`} />
+      </div>
+      <span className="font-semibold text-sm">{label}</span>
+      <span className="text-xs text-muted-foreground mt-1 text-center">{desc}</span>
+    </motion.button>
+  );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(isOpen) => {
-        setOpen(isOpen);
-        if (!isOpen) resetState();
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Upload className="mr-2 h-4 w-4" />
-          Upload Content
+        <Button size="lg" className="shadow-lg shadow-primary/20 rounded-full px-6">
+          <Upload className="mr-2 h-4 w-4" /> Add Source
         </Button>
       </DialogTrigger>
-
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add Learning Material</DialogTitle>
-          <DialogDescription>
-            Upload a document or paste a YouTube URL to start learning with AI.
-          </DialogDescription>
+      
+      <DialogContent className="sm:max-w-2xl p-0 overflow-hidden bg-background/80 backdrop-blur-xl border-border/50">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle className="text-xl font-bold">
+            {activeTab === "select" ? "Add to Library" : "Upload Content"}
+          </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="file" disabled={uploading}>
-              <FileText className="mr-2 h-4 w-4" />
-              Upload File
-            </TabsTrigger>
-            <TabsTrigger value="youtube" disabled={uploading}>
-              <Youtube className="mr-2 h-4 w-4" />
-              YouTube URL
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ── File Upload Tab ── */}
-          <TabsContent value="file" className="space-y-4 mt-4">
-            {/* File Selector */}
-            <div
-              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.pptx,.docx"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              {selectedFile ? (
-                <div className="flex items-center justify-center gap-3">
-                  <File className="h-8 w-8 text-primary" />
-                  <div className="text-left">
-                    <p className="font-medium">{selectedFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">Click to select a file</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    PDF, PPTX, or DOCX (max 10MB)
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Title Input */}
-            {selectedFile && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Title</label>
-                <Input
-                  value={fileTitle}
-                  onChange={(e) => setFileTitle(e.target.value)}
-                  placeholder="Document title"
+        <div className="p-6 pt-2">
+          <AnimatePresence mode="wait">
+            {activeTab === "select" ? (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="grid grid-cols-2 sm:grid-cols-3 gap-4"
+              >
+                <OptionCard 
+                  icon={FileText} 
+                  label="Document" 
+                  desc="PDF, DOCX, PPTX" 
+                  color="bg-blue-500" 
+                  onClick={() => setActiveTab("file")} 
                 />
-              </div>
+                <OptionCard 
+                  icon={Globe} 
+                  label="Website / YouTube" 
+                  desc="Link scraping" 
+                  color="bg-red-500" 
+                  onClick={() => setActiveTab("web")} 
+                />
+                <OptionCard 
+                  icon={FileAudio} 
+                  label="Audio / Video" 
+                  desc="MP3, MP4, WAV" 
+                  color="bg-yellow-500" 
+                  onClick={() => setActiveTab("media")} 
+                />
+                <OptionCard 
+                  icon={FileText} 
+                  label="Paste Text" 
+                  desc="Raw text input" 
+                  color="bg-green-500" 
+                  onClick={() => setActiveTab("text")} 
+                />
+                <OptionCard 
+                  icon={Mic} 
+                  label="Record Audio" 
+                  desc="Live lecture" 
+                  color="bg-purple-500" 
+                  onClick={() => setActiveTab("record")} 
+                />
+              </motion.div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+              >
+                <Button variant="ghost" size="sm" onClick={() => setActiveTab("select")} className="mb-2 -ml-2 text-muted-foreground">
+                  ← Back to options
+                </Button>
+
+                {/* File Upload */}
+                {activeTab === "file" && (
+                  <div className="space-y-4">
+                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:bg-accent/50 transition-colors">
+                      <input type="file" id="file-upload" accept=".pdf,.pptx,.docx" onChange={handleFile} className="hidden" />
+                      <label htmlFor="file-upload" className="cursor-pointer block">
+                        <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm font-medium">Click to select file</p>
+                        <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, PPTX (Max 10MB)</p>
+                      </label>
+                    </div>
+                    {file && (
+                      <div className="bg-muted/50 p-3 rounded-lg flex items-center justify-between">
+                        <span className="text-sm font-medium truncate">{file.name}</span>
+                        <span className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                      </div>
+                    )}
+                    <Input placeholder="Title (Optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <Button onClick={uploadFile} disabled={!file || status !== "idle"} className="w-full">
+                      {status === "uploading" ? <Loader2 className="animate-spin mr-2" /> : <Upload className="mr-2 h-4 w-4" />} Upload
+                    </Button>
+                  </div>
+                )}
+
+                {/* Web / YouTube */}
+                {activeTab === "web" && (
+                  <div className="space-y-4">
+                    <Input placeholder="Paste URL here (YouTube or Website)..." value={url} onChange={(e) => setUrl(e.target.value)} className="h-12" />
+                    <Input placeholder="Title (Optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button onClick={() => uploadWeb(true)} disabled={!url || status !== "idle"} variant="outline" className="h-12">
+                        <Youtube className="mr-2 h-4 w-4 text-red-500" /> YouTube
+                      </Button>
+                      <Button onClick={() => uploadWeb(false)} disabled={!url || status !== "idle"} variant="outline" className="h-12">
+                        <Globe className="mr-2 h-4 w-4 text-blue-500" /> Website
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Media Upload */}
+                {activeTab === "media" && (
+                  <div className="space-y-4">
+                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:bg-accent/50 transition-colors">
+                      <input type="file" id="media-upload" accept="audio/*,video/*" onChange={handleFile} className="hidden" />
+                      <label htmlFor="media-upload" className="cursor-pointer block">
+                        <FileAudio className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm font-medium">Select Audio or Video</p>
+                        <p className="text-xs text-muted-foreground mt-1">MP3, MP4, WAV (Max 25MB)</p>
+                      </label>
+                    </div>
+                    {file && (
+                      <div className="bg-muted/50 p-3 rounded-lg flex items-center justify-between">
+                        <span className="text-sm font-medium truncate">{file.name}</span>
+                        <span className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                      </div>
+                    )}
+                    <Button onClick={uploadFile} disabled={!file || status !== "idle"} className="w-full">Transcribe & Upload</Button>
+                  </div>
+                )}
+
+                {/* Text Paste */}
+                {activeTab === "text" && (
+                  <div className="space-y-4">
+                    <Textarea placeholder="Paste your notes or text here..." value={text} onChange={(e) => setText(e.target.value)} className="min-h-[200px] resize-none" />
+                    <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <Button onClick={uploadText} disabled={!text || status !== "idle"} className="w-full">Process Text</Button>
+                  </div>
+                )}
+
+                {/* Recording */}
+                {activeTab === "record" && (
+                  <div className="flex flex-col items-center justify-center py-8 space-y-6">
+                    {!recording && !audioBlob ? (
+                      <motion.button 
+                        whileHover={{ scale: 1.1 }} 
+                        whileTap={{ scale: 0.9 }}
+                        onClick={startRecording} 
+                        className="h-24 w-24 rounded-full bg-red-500/10 text-red-500 border-2 border-red-500 flex items-center justify-center"
+                      >
+                        <Mic className="h-10 w-10" />
+                      </motion.button>
+                    ) : recording ? (
+                      <div className="text-center space-y-4">
+                        <div className="animate-pulse text-red-500 font-bold tracking-widest">RECORDING...</div>
+                        <Button onClick={stopRecording} variant="destructive" size="lg" className="rounded-full px-8">Stop Recording</Button>
+                      </div>
+                    ) : (
+                      <div className="text-center space-y-4 w-full">
+                        <div className="flex items-center justify-center gap-2 text-green-500 font-medium">
+                          <CheckCircle2 className="h-5 w-5" /> Recording Captured
+                        </div>
+                        <Input placeholder="Recording Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                        <Button onClick={uploadFile} className="w-full">Upload & Transcribe</Button>
+                        <Button variant="ghost" onClick={() => { setAudioBlob(null); setFile(null); }} className="text-xs text-muted-foreground">Discard & Record Again</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Status Message */}
+                {msg && (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-muted/50 p-4 rounded-xl flex items-center gap-3">
+                    {status === "processing" || status === "uploading" ? <Loader2 className="animate-spin text-primary" /> : status === "done" ? <CheckCircle2 className="text-green-500" /> : <XCircle className="text-red-500" />}
+                    <p className="text-sm font-medium">{msg}</p>
+                  </motion.div>
+                )}
+              </motion.div>
             )}
-
-            {/* Upload Button */}
-            <Button
-              onClick={handleFileUpload}
-              disabled={!selectedFile || !fileTitle.trim() || uploading}
-              className="w-full"
-            >
-              {uploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {uploading ? "Processing..." : "Upload & Process"}
-            </Button>
-          </TabsContent>
-
-          {/* ── YouTube Tab ── */}
-          <TabsContent value="youtube" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">YouTube URL</label>
-              <Input
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                disabled={uploading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Title{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </label>
-              <Input
-                value={youtubeTitle}
-                onChange={(e) => setYoutubeTitle(e.target.value)}
-                placeholder="Video title"
-                disabled={uploading}
-              />
-            </div>
-
-            <Button
-              onClick={handleYoutubeUpload}
-              disabled={!youtubeUrl.trim() || uploading}
-              className="w-full"
-            >
-              {uploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Youtube className="mr-2 h-4 w-4" />
-              )}
-              {uploading ? "Processing..." : "Process Video"}
-            </Button>
-          </TabsContent>
-        </Tabs>
-
-        {/* ── Status Message ── */}
-        {statusMessage && (
-          <div
-            className={`flex items-center gap-3 p-3 rounded-lg mt-2 ${
-              status === "error"
-                ? "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300"
-                : status === "done"
-                  ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300"
-                  : "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
-            }`}
-          >
-            <StatusIcon />
-            <p className="text-sm">{statusMessage}</p>
-          </div>
-        )}
+          </AnimatePresence>
+        </div>
       </DialogContent>
     </Dialog>
   );

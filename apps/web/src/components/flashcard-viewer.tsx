@@ -1,163 +1,96 @@
 "use client";
 
 import { useState } from "react";
+import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Shuffle,
-} from "lucide-react";
+import { RotateCcw, Shuffle, Check, X } from "lucide-react";
 
-interface Flashcard {
-  front: string;
-  back: string;
-  difficulty: "easy" | "medium" | "hard";
-}
-
-interface FlashcardViewerProps {
-  data: { flashcards: Flashcard[] };
-}
-
-export function FlashcardViewer({ data }: FlashcardViewerProps) {
-  const [cards, setCards] = useState<Flashcard[]>(data.flashcards);
+export function FlashcardViewer({ data }: any) {
+  const [cards, setCards] = useState(data.flashcards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [knownCards, setKnownCards] = useState<Set<number>>(new Set());
+  const [knownCount, setKnownCount] = useState(0);
+
+  // Swipe physics
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-15, 15]);
+  const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0]);
+  const colorRight = useTransform(x, [0, 100], ["rgba(34, 197, 94, 0)", "rgba(34, 197, 94, 0.2)"]);
+  const colorLeft = useTransform(x, [-100, 0], ["rgba(239, 68, 68, 0.2)", "rgba(239, 68, 68, 0)"]);
 
   const currentCard = cards[currentIndex];
-  const total = cards.length;
+  if (!currentCard) return null;
 
-  const goNext = () => {
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev + 1) % total);
-  };
-
-  const goPrev = () => {
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev - 1 + total) % total);
-  };
-
-  const shuffleCards = () => {
-    const shuffled = [...cards].sort(() => Math.random() - 0.5);
-    setCards(shuffled);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setKnownCards(new Set());
-  };
-
-  const toggleKnown = () => {
-    const newKnown = new Set(knownCards);
-    if (newKnown.has(currentIndex)) {
-      newKnown.delete(currentIndex);
-    } else {
-      newKnown.add(currentIndex);
+  const handleDragEnd = (e: any, info: any) => {
+    if (info.offset.x > 100) {
+      // Swiped Right (Known)
+      setKnownCount(prev => prev + 1);
+      nextCard();
+    } else if (info.offset.x < -100) {
+      // Swiped Left (Review)
+      nextCard();
     }
-    setKnownCards(newKnown);
   };
 
-  const difficultyColor = {
-    easy: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-    hard: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  const nextCard = () => {
+    setIsFlipped(false);
+    setTimeout(() => setCurrentIndex((prev) => (prev + 1) % cards.length), 200);
   };
-
-  if (!currentCard) {
-    return <div className="p-4 text-center text-muted-foreground">No flashcards available</div>;
-  }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4 space-y-6">
-      {/* Progress */}
-      <div className="flex items-center gap-4 text-sm">
-        <span className="text-muted-foreground">
-          Card {currentIndex + 1} of {total}
-        </span>
-        <span className="text-green-600 font-medium">
-          {knownCards.size} known
-        </span>
-        <span className="text-orange-600 font-medium">
-          {total - knownCards.size} remaining
-        </span>
+    <div className="flex flex-col items-center justify-center h-full p-6 space-y-8 overflow-hidden">
+      <div className="flex w-full max-w-sm justify-between text-sm font-bold text-muted-foreground uppercase tracking-widest">
+        <span>Cards: {currentIndex + 1} / {cards.length}</span>
+        <span className="text-green-500">Known: {knownCount}</span>
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full max-w-lg h-2 bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-green-500 transition-all duration-300"
-          style={{ width: `${(knownCards.size / total) * 100}%` }}
-        />
-      </div>
-
-      {/* Flashcard */}
-      <div
-        className="w-full max-w-lg cursor-pointer perspective-1000"
-        onClick={() => setIsFlipped(!isFlipped)}
-      >
-        <Card
-          className={`min-h-[250px] transition-all duration-300 ${
-            knownCards.has(currentIndex)
-              ? "border-green-500 border-2"
-              : ""
-          }`}
-        >
-          <CardContent className="flex flex-col items-center justify-center min-h-[250px] p-8 text-center">
-            {/* Difficulty Badge */}
-            <Badge
-              variant="secondary"
-              className={`mb-4 ${difficultyColor[currentCard.difficulty]}`}
+      <div className="relative w-full max-w-sm h-[400px] flex items-center justify-center perspective-1000">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIndex}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            style={{ x, rotate, opacity }}
+            onDragEnd={handleDragEnd}
+            whileDrag={{ scale: 1.05, cursor: "grabbing" }}
+            className="absolute inset-0 cursor-grab z-10"
+          >
+            <motion.div
+              initial={false}
+              animate={{ rotateY: isFlipped ? 180 : 0 }}
+              transition={{ duration: 0.6, type: "spring", stiffness: 260, damping: 20 }}
+              onClick={() => setIsFlipped(!isFlipped)}
+              className="w-full h-full relative preserve-3d"
             >
-              {currentCard.difficulty}
-            </Badge>
+              {/* Front */}
+              <motion.div 
+                className="absolute inset-0 backface-hidden w-full h-full rounded-3xl border-2 border-border/50 bg-card shadow-2xl p-8 flex flex-col items-center justify-center text-center"
+                style={{ backgroundColor: x.get() > 0 ? colorRight as any : colorLeft as any }}
+              >
+                <Badge variant="outline" className="absolute top-6">{currentCard.difficulty}</Badge>
+                <p className="text-xs font-bold text-muted-foreground mb-6 uppercase tracking-widest">Question</p>
+                <p className="text-2xl font-bold">{currentCard.front}</p>
+                
+                {/* Swipe hints */}
+                <div className="absolute bottom-6 flex w-full px-8 justify-between opacity-30">
+                  <div className="flex items-center gap-1 text-red-500"><X className="h-4 w-4"/> Swipe Review</div>
+                  <div className="flex items-center gap-1 text-green-500">Swipe Known <Check className="h-4 w-4"/></div>
+                </div>
+              </motion.div>
 
-            {/* Label */}
-            <p className="text-xs text-muted-foreground mb-3">
-              {isFlipped ? "ANSWER" : "QUESTION"} — Click to flip
-            </p>
-
-            {/* Content */}
-            <p className="text-lg leading-relaxed">
-              {isFlipped ? currentCard.back : currentCard.front}
-            </p>
-          </CardContent>
-        </Card>
+              {/* Back */}
+              <div className="absolute inset-0 backface-hidden rotate-y-180 w-full h-full rounded-3xl border-2 border-primary/50 bg-primary/5 shadow-2xl p-8 flex flex-col items-center justify-center text-center">
+                <p className="text-xs font-bold text-primary mb-6 uppercase tracking-widest">Answer</p>
+                <p className="text-xl font-medium leading-relaxed">{currentCard.back}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="icon" onClick={goPrev}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant={knownCards.has(currentIndex) ? "default" : "outline"}
-          onClick={toggleKnown}
-          className="min-w-[100px]"
-        >
-          {knownCards.has(currentIndex) ? "Known ✓" : "Mark Known"}
-        </Button>
-
-        <Button variant="outline" size="icon" onClick={shuffleCards}>
-          <Shuffle className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => {
-            setCurrentIndex(0);
-            setIsFlipped(false);
-            setKnownCards(new Set());
-          }}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-
-        <Button variant="outline" size="icon" onClick={goNext}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+      <div className="flex gap-4">
+        <Button variant="outline" onClick={() => { setCurrentIndex(0); setKnownCount(0); }}><RotateCcw className="h-4 w-4 mr-2"/> Restart</Button>
       </div>
     </div>
   );
