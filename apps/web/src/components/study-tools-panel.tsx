@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChatPanel } from "@/components/chat-panel";
-import { SummaryView } from "@/components/summary-view";
-import { FlashcardViewer } from "@/components/flashcard-viewer";
-import { QuizMode } from "@/components/quiz-mode";
-import { AudioOverview } from "@/components/audio-overview";
-import { NotesEditor } from "@/components/notes-editor";
 import { MessageSquare, FileText, Layers, HelpCircle, Loader2, AlertCircle, RefreshCw, Headphones, PenTool } from "lucide-react";
+
+// LAZY LOAD HEAVY COMPONENTS
+const ChatPanel = dynamic(() => import("@/components/chat-panel").then(m => m.ChatPanel), { loading: () => <Loader2 className="animate-spin m-auto mt-10" /> });
+const NotesEditor = dynamic(() => import("@/components/notes-editor").then(m => m.NotesEditor));
+const SummaryView = dynamic(() => import("@/components/summary-view").then(m => m.SummaryView));
+const FlashcardViewer = dynamic(() => import("@/components/flashcard-viewer").then(m => m.FlashcardViewer), { ssr: false }); 
+const QuizMode = dynamic(() => import("@/components/quiz-mode").then(m => m.QuizMode));
+const AudioOverview = dynamic(() => import("@/components/audio-overview").then(m => m.AudioOverview), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -30,7 +33,7 @@ export function StudyToolsPanel({ sourceId, userId, sourceTitle }: any) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source_id: sourceId, user_id: userId, material_type: type }),
       });
-      if (!res.ok) throw new Error("Failed to generate. Please try again.");
+      if (!res.ok) throw new Error("Failed to generate.");
       const result = await res.json();
       setter({ loading: false, data: result.content, error: null });
     } catch (e: any) { setter({ loading: false, data: null, error: e.message }); }
@@ -44,20 +47,20 @@ export function StudyToolsPanel({ sourceId, userId, sourceTitle }: any) {
     if (val === "podcast" && !podcast.data) generate("podcast", setPodcast);
   };
 
-  const renderLoad = (t: string) => (<div className="flex flex-col items-center justify-center h-full p-8"><Loader2 className="h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground">Generating {t}... (This takes 15-30s)</p></div>);
-  const renderErr = (e: string, retry: any) => (<div className="flex flex-col items-center justify-center h-full p-8"><AlertCircle className="h-8 w-8 text-red-500 mb-2"/><p className="text-red-500 mb-4">{e}</p><Button onClick={retry} variant="outline"><RefreshCw className="mr-2 h-4 w-4"/>Retry</Button></div>);
+  const renderLoad = (t: string) => (<div className="flex flex-col items-center justify-center h-full p-8 text-center"><Loader2 className="h-8 w-8 animate-spin text-primary mb-4"/><p className="text-muted-foreground text-sm">Generating {t}... (Takes 15-30s)</p></div>);
+  const renderErr = (e: string, retry: any) => (<div className="flex flex-col items-center justify-center h-full p-8 text-center"><AlertCircle className="h-8 w-8 text-red-500 mb-2"/><p className="text-red-500 mb-4 text-sm">{e}</p><Button onClick={retry} variant="outline" size="sm"><RefreshCw className="mr-2 h-4 w-4"/>Retry</Button></div>);
 
   if (!mounted) return <div className="h-full flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col h-full w-full">
-      <TabsList className="grid w-full grid-cols-6 rounded-none border-b h-12 bg-background/95 backdrop-blur">
-        <TabsTrigger value="chat" className="text-xs rounded-none"><MessageSquare className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Chat</span></TabsTrigger>
-        <TabsTrigger value="notes" className="text-xs rounded-none"><PenTool className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Notes</span></TabsTrigger>
-        <TabsTrigger value="podcast" className="text-xs rounded-none"><Headphones className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Audio</span></TabsTrigger>
-        <TabsTrigger value="summary" className="text-xs rounded-none"><FileText className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Sum</span></TabsTrigger>
-        <TabsTrigger value="flashcards" className="text-xs rounded-none"><Layers className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Cards</span></TabsTrigger>
-        <TabsTrigger value="quiz" className="text-xs rounded-none"><HelpCircle className="h-4 w-4 sm:mr-2"/><span className="hidden sm:block">Quiz</span></TabsTrigger>
+      <TabsList className="flex w-full overflow-x-auto rounded-none border-b h-12 bg-background/95 backdrop-blur px-2 justify-start sm:justify-center no-scrollbar">
+        <TabsTrigger value="chat" className="text-xs rounded-none whitespace-nowrap"><MessageSquare className="h-3.5 w-3.5 mr-1.5"/>Chat</TabsTrigger>
+        <TabsTrigger value="notes" className="text-xs rounded-none whitespace-nowrap"><PenTool className="h-3.5 w-3.5 mr-1.5"/>Notes</TabsTrigger>
+        <TabsTrigger value="podcast" className="text-xs rounded-none whitespace-nowrap"><Headphones className="h-3.5 w-3.5 mr-1.5"/>Audio</TabsTrigger>
+        <TabsTrigger value="summary" className="text-xs rounded-none whitespace-nowrap"><FileText className="h-3.5 w-3.5 mr-1.5"/>Sum</TabsTrigger>
+        <TabsTrigger value="flashcards" className="text-xs rounded-none whitespace-nowrap"><Layers className="h-3.5 w-3.5 mr-1.5"/>Cards</TabsTrigger>
+        <TabsTrigger value="quiz" className="text-xs rounded-none whitespace-nowrap"><HelpCircle className="h-3.5 w-3.5 mr-1.5"/>Quiz</TabsTrigger>
       </TabsList>
 
       <div className="flex-1 overflow-hidden bg-background/50 relative">

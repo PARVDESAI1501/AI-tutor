@@ -20,7 +20,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
       {/* Abstract Animated Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 hidden md:block">
         <motion.div 
           animate={{ rotate: 360, scale: [1, 1.2, 1] }} 
           transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
