@@ -33,8 +33,10 @@ async def delete_source(source_id: str, user_id: str):
     # Delete file from storage
     if source_result.data.get("file_path"):
         try:
-            supabase.storage.from_("documents").remove([source_result.data["file_path"]])
-            print(f"[Delete] Removed file from storage")
+            supabase.storage.from_("documents").remove(
+                [source_result.data["file_path"]]
+            )
+            print("[Delete] Removed file from storage")
         except Exception as e:
             print(f"[Delete] Storage delete skipped: {e}")
 
@@ -46,11 +48,18 @@ async def delete_source(source_id: str, user_id: str):
 
     # Delete messages via conversations (ignore errors)
     try:
-        convs = supabase.table("conversations").select("id").eq("source_id", source_id).execute()
+        convs = (
+            supabase.table("conversations")
+            .select("id")
+            .eq("source_id", source_id)
+            .execute()
+        )
         if convs.data:
             for conv in convs.data:
                 try:
-                    supabase.table("messages").delete().eq("conversation_id", conv["id"]).execute()
+                    supabase.table("messages").delete().eq(
+                        "conversation_id", conv["id"]
+                    ).execute()
                 except Exception:
                     pass
     except Exception:
@@ -71,7 +80,7 @@ async def delete_source(source_id: str, user_id: str):
     # Delete the source itself
     try:
         supabase.table("sources").delete().eq("id", source_id).execute()
-        print(f"[Delete] ✅ Source deleted successfully")
+        print("[Delete] ✅ Source deleted successfully")
     except Exception as e:
         print(f"[Delete] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete: {e}")

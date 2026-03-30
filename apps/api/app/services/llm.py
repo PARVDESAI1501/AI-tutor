@@ -117,7 +117,10 @@ class LLMService:
     def _generate_json_gemini_fallback(self, prompt: str, system_prompt: str) -> dict:
         """Generate JSON using Gemini without JSON mode, then parse manually."""
 
-        full_prompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no explanation. Just the raw JSON object."
+        full_prompt = (
+            prompt
+            + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no explanation. Just the raw JSON object."
+        )
 
         config = types.GenerateContentConfig(
             temperature=0.3,

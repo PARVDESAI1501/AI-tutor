@@ -90,7 +90,7 @@ class EmbeddingService:
                 all_embeddings.append(list(embedding.values))
 
             if i + batch_size < len(texts):
-                print(f"  [Embedder] Waiting 5 seconds before next batch...")
+                print("  [Embedder] Waiting 5 seconds before next batch...")
                 time.sleep(5)
 
         print(f"  [Embedder] Done! Generated {len(all_embeddings)} embeddings")
