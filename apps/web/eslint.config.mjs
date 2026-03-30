@@ -6,15 +6,13 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // These rules will silence the errors blocking your CI pipeline
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",
       "react/no-unescaped-entities": "off",
-      "@next/next/no-img-element": "off", // Optional: prevents errors if using <img> instead of <Image>
+      "@next/next/no-img-element": "off",
     },
   },
-  // Override default ignores of eslint-config-next.
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 ]);
 
