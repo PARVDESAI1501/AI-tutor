@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "@/components/chat-message";
 import { createClient } from "@/lib/supabase/client";
 import { Send, Loader2, Bot } from "lucide-react";
@@ -39,14 +38,9 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
     }
   }, [messages]);
 
-  // Create or load conversation
-  useEffect(() => {
-    loadOrCreateConversation();
-  }, [sourceId]);
-
-  const loadOrCreateConversation = async () => {
+  // Wrapped in useCallback so it's stable and can be added to deps array
+  const loadOrCreateConversation = useCallback(async () => {
     try {
-      // Check for existing conversation
       const { data: existing } = await supabase
         .from("conversations")
         .select("*")
@@ -58,7 +52,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
       if (existing && existing.length > 0) {
         setConversationId(existing[0].id);
 
-        // Load existing messages
         const { data: existingMessages } = await supabase
           .from("messages")
           .select("*")
@@ -76,7 +69,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
           );
         }
       } else {
-        // Create new conversation
         const { data: newConv } = await supabase
           .from("conversations")
           .insert({
@@ -94,7 +86,12 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
     } catch (error) {
       console.error("Failed to load conversation:", error);
     }
-  };
+  }, [sourceId, userId, sourceTitle, supabase]);
+
+  // Now loadOrCreateConversation is stable, so it's safe in the deps array
+  useEffect(() => {
+    loadOrCreateConversation();
+  }, [loadOrCreateConversation]);
 
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
@@ -103,7 +100,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
       const trimmedInput = input.trim();
       if (!trimmedInput || isStreaming) return;
 
-      // Add user message to UI
       const userMessage: Message = {
         id: `user-${Date.now()}`,
         role: "user",
@@ -113,7 +109,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
       setInput("");
       setIsStreaming(true);
 
-      // Add empty assistant message for streaming
       const assistantId = `assistant-${Date.now()}`;
       const assistantMessage: Message = {
         id: assistantId,
@@ -123,13 +118,11 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
       setMessages((prev) => [...prev, assistantMessage]);
 
       try {
-        // Build history from existing messages
         const history = messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         }));
 
-        // Call the chat API
         const response = await fetch(`${API_URL}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -147,7 +140,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
           throw new Error(error.detail || "Chat request failed");
         }
 
-        // Read the SSE stream
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullResponse = "";
@@ -164,17 +156,13 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6).trim();
 
-                if (data === "[DONE]") {
-                  continue;
-                }
+                if (data === "[DONE]") continue;
 
                 try {
                   const parsed = JSON.parse(data);
 
                   if (parsed.token) {
                     fullResponse += parsed.token;
-
-                    // Update the assistant message with new content
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === assistantId
@@ -188,7 +176,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
                     throw new Error(parsed.error);
                   }
                 } catch (parseError) {
-                  // Skip malformed JSON lines
                   if (data !== "[DONE]") {
                     console.debug("Skipping line:", data);
                   }
@@ -198,7 +185,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
           }
         }
 
-        // Parse source citations from the response
         let cleanContent = fullResponse;
         let sources: any[] = [];
 
@@ -213,7 +199,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
           }
         }
 
-        // Update final message with clean content and sources
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantId
@@ -223,8 +208,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
         );
       } catch (error: any) {
         console.error("Chat error:", error);
-
-        // Update assistant message with error
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantId
@@ -245,7 +228,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
     [input, isStreaming, messages, sourceId, userId, conversationId],
   );
 
-  // Handle Enter key (Submit on Enter, new line on Shift+Enter)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -258,7 +240,6 @@ export function ChatPanel({ sourceId, userId, sourceTitle }: ChatPanelProps) {
       {/* Chat Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          /* Welcome Message */
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="rounded-full bg-green-100 dark:bg-green-900 p-4 mb-4">
               <Bot className="h-8 w-8 text-green-600 dark:text-green-400" />

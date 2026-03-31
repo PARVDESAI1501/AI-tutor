@@ -1,22 +1,25 @@
 "use client";
-
+import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+
+function useIsMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
 
 export function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const { theme, setTheme } = useTheme();
+  const mounted = useIsMounted();
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" className="h-9 w-9">
-        <div className="h-4 w-4" />
+      <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
+        <Sun className="h-4 w-4" />
       </Button>
     );
   }
@@ -25,14 +28,15 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="h-9 w-9"
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      className="h-8 w-8"
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
     >
-      {resolvedTheme === "dark" ? (
-        <Sun className="h-4 w-4 transition-transform duration-300 rotate-0" />
+      {theme === "dark" ? (
+        <Sun className="h-4 w-4" />
       ) : (
-        <Moon className="h-4 w-4 transition-transform duration-300 rotate-0" />
+        <Moon className="h-4 w-4" />
       )}
+      <span className="sr-only">Toggle theme</span>
     </Button>
   );
 }
